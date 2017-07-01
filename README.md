@@ -11,6 +11,9 @@
 ### 主要实现流程
 
 POST Json 注册服务 -> Consul Service <- Prometheus -> 定时抓取 http指标接口
+
 POST KV 提交Endpoint -> Consul KV Service <- Nginx 定时更新需要监控的Endpoint
+
 Grafana 读取 -> Prometheus
+
 
