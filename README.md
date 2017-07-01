@@ -18,7 +18,7 @@ Grafana 读取 -> Prometheus
 
 ### 优点
 
-* 基本实现自动化，各种接口使用非常简单
+* 基本实现自动化集中配置，各种接口使用非常简单
 * 通过Prometheus提供了非常丰富的查询维度，例如（域名、Endpoint、状态码、协议类型、method），当然还可以非常简单地添加更多。
 * Grafana图表功能强大，非常直观地查看各个服务的状态和发现异常。
 
@@ -56,4 +56,76 @@ lua_package_path "/Users/zl/Work/Counter/nginx-lua-prometheus/?.lua;;/Users/zl/W
 ```
 
 把consul的地址和端口替换上。
+
+```
+server {
+    listen 9145;
+    allow 127.0.0.1;
+    deny all;
+    access_log off;
+    location /metrics {
+        content_by_lua 'prometheus:collect()';
+    }
+}
+```
+
+添加allow 允许指定ip访问 指标接口。
+
+启动Openresty后，试试 `http://<ip>:9145/metrics` 
+
+### 配置 Prometheus 服务发现功能
+
+详细参考这个文档
+
+`https://prometheus.io/docs/operating/configuration/#<consul_sd_config>`
+
+完成后，通过Consul 的 http API进行注册服务。
+
+```
+curl -X PUT -d @test.json http://<ip>:<port>/v1/agent/service/register
+``` 
+
+```json
+{
+  "ID": <定义唯一的ID>,
+  "Name": "对应prometheus consul_sd_config",
+  "Tags": [
+    ""
+  ],
+  "Address": <Openresty地址>,
+  "Port": 9145
+}
+```
+
+注销服务
+
+```
+curl http://<ip>:<port>/v1/agent/service/deregister/<ID>
+```
+
+### 配置 Consul KV存储
+
+增加域名和对应的Endpoint
+
+```
+curl --request PUT --data @test.json http://<ip>:<port>/v1/kv/domain/<api.qq.com>/routers
+```
+数组
+
+```json
+[
+"/users/[0-9]+/followers/",
+"/users/[0-9]+/",
+"/users/[0-9]+/comments/",
+"/news"
+]
+```
+
+### 配置Grafana 到 Prometheus上读取数据
+
+详细文档参考 `https://prometheus.io/docs/visualization/grafana/`
+
+
+### 创建图表
+
 
