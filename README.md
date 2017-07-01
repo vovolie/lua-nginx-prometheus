@@ -36,9 +36,9 @@ Grafana 读取 -> Prometheus
 
 克隆 lua-nginx-prometheus 仓库到Openresty服务器上。
 
-克隆依赖Prometheus ![nginx-lua-prometheus](https://github.com/knyar/nginx-lua-prometheus) 仓库到服务器上。
+克隆依赖Prometheus [nginx-lua-prometheus](https://github.com/knyar/nginx-lua-prometheus) 仓库到服务器上。
 
-克隆依赖Consul ![lua-resty-consul](https://github.com/hamishforbes/lua-resty-consul) 仓库到服务器上。
+克隆依赖Consul [lua-resty-consul](https://github.com/hamishforbes/lua-resty-consul) 仓库到服务器上。
 
 把lua-nginx-prometheus仓库中的 counter.conf文件复制到Openresty目录下的nginx/conf/conf.d目录内。
 
