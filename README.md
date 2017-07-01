@@ -128,4 +128,22 @@ curl --request PUT --data @test.json http://<ip>:<port>/v1/kv/domain/<api.qq.com
 
 ### 创建图表
 
+常见查询语句
+
+```
+sum(irate(nginx_http_request_duration_seconds_count{host="api.qq.com"}[5m])) by (status)
+```
+多台服务器合计每秒请求量，查询单个域名，group by 用状态码
+
+```
+sum(rate(nginx_http_request_duration_seconds_sum{host="api.qq.com",endpoint!="/ws"}[1m])) / sum(rate(nginx_http_request_duration_seconds_count{host="api.qq.com",endpoint!="/ws"}[1m]))
+```
+接口平均响应时间, 不包含 websocket接口
+
+histogram 直方图非常有用，可以详细了解一下。
+
+```
+topk(5, sum(rate(nginx_http_request_duration_seconds_sum{host="api.qq.com",endpoint!="/ws"}[1h])) by (endpoint)/sum(rate(nginx_http_request_duration_seconds_count{host="api.qq.com",endpoint!="/ws"}[1h])) by (endpoint))
+```
+5个响应时间最大的，不包含 websocket接口
 
