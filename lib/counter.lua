@@ -1,15 +1,14 @@
 local cjson = require('cjson')
-local resty_consul = require('resty.consul')
+local http = require('resty.http')
+local pcall = pcall
 local json_decode = cjson.decode
 local ngx = ngx
 local ngx_log = ngx.log
 local ngx_err = ngx.ERR
 local timer_at = ngx.timer.at
 local ngx_sleep = ngx.sleep
-local delay = 300  -- 10s
-
+local delay = 300  -- 轮询consul时间间隔，10s
 local _M = {}
-
 function _M.init()
     uris = ngx.shared.uri_by_host
     global_set = ngx.shared.global_set
@@ -19,35 +18,38 @@ function _M.init()
     metric_get_consul = prometheus:counter("nginx_consul_get_total", "Number of query uri from consul", {"status"})
     metric_latency = prometheus:histogram("nginx_http_request_duration_seconds", "HTTP request latency status", {"host", "status", "scheme", "method", "endpoint"})
 end
-
 function _M.sync_consul()
-    local consul = resty_consul:new({ host = consul_host, port = consul_port })
-    local res, err = consul:get_decoded("/kv/domain/Value")
-    if res == nil then
+    local httpc = http.new()
+    httpc:set_timeout(500)
+    local res, err = httpc:request_uri("http://consul_ip:8500/v1/kv/domain/Value?raw")
+    if not res then
         ngx_log(ngx_err, err)
         metric_get_consul:inc(1, {"failed"})
         return false
     else
         metric_get_consul:inc(1, {"succ"})
     end
-    local hosts, err = json_decode(res[1]['Value'])
+    local hosts, err = json_decode(res.body)
     if hosts == nil then
         ngx_log(ngx_err, err)
         return false
     end
     for i=1, #hosts do
         local host = hosts[i]
-        local get_uri_by_host, err = consul:get_decoded("/kv/domain/" .. host .. "/routers")
-        if get_uri_by_host == nil then
+        local get_uri_by_host, err = httpc:request_uri("http://consul_ip:8500/v1/kv/domain/"..host.."/routers?raw")
+        if not get_uri_by_host then
             ngx_log(ngx_err, err)
             return false
         end
-        uris:set(host, get_uri_by_host[1]['Value'])
+        local uris_json = get_uri_by_host.body
+        if not uris_json then
+            ngx_log(ngx_err, err)
+            return false
+        end
+        uris:set(host, uris_json)
     end
     return true
-    -- ngx_log(ngx_err, table.concat(uris:get_keys()))
 end
-
 function _M.first_init()
     local initted = global_set:get("initted")
     if initted == false then
@@ -67,7 +69,6 @@ function _M.first_init()
         ngx_log(ngx_err, "First initialize load consul data!")
     end
 end
-
 function _M.loop_load()
     local loop_handler
     function loop_handler(premature)
@@ -98,7 +99,6 @@ function _M.loop_load()
         end
     end
 end
-
 function _M.log()
     _M.first_init()
     _M.loop_load()
@@ -120,12 +120,12 @@ function _M.log()
                 return
             end
             for k=1, #def_uri do
-                if ngx.re.find(request_uri, def_uri[k], 'isjo') ~= nil then
+                local s = "^"..def_uri[k].."$"
+                if ngx.re.find(request_uri, s, "isjo" ) ~= nil then
                     metric_latency:observe(ngx.now() - ngx.req.start_time(), {request_host, request_status, request_scheme, request_method, def_uri[k]})
                 end
             end
         end
     end
 end
-
 return _M
