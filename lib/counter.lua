@@ -9,6 +9,8 @@ local timer_at = ngx.timer.at
 local ngx_sleep = ngx.sleep
 local delay = 300  -- 轮询consul时间间隔，10s
 local _M = {}
+
+-- 初始化Prometheus指标，全局字典对象，initted 已经被初始化标记，looped 已经开始循环标记
 function _M.init()
     uris = ngx.shared.uri_by_host
     global_set = ngx.shared.global_set
@@ -18,6 +20,7 @@ function _M.init()
     metric_get_consul = prometheus:counter("nginx_consul_get_total", "Number of query uri from consul", {"status"})
     metric_latency = prometheus:histogram("nginx_http_request_duration_seconds", "HTTP request latency status", {"host", "status", "scheme", "method", "endpoint"})
 end
+-- 从consul上拉取k-v数据，先取得 domain内的 域名列表，然后迭代全部域名key内的endpoint值
 function _M.sync_consul()
     local httpc = http.new()
     httpc:set_timeout(500)
@@ -50,6 +53,7 @@ function _M.sync_consul()
     end
     return true
 end
+-- nginx启动后，初次开始同步consul
 function _M.first_init()
     local initted = global_set:get("initted")
     if initted == false then
@@ -61,6 +65,7 @@ function _M.first_init()
                 return
             end
         end
+        -- 第一次启动定时器
         local ok, err = timer_at(0, handler)
         if not ok then
             ngx_log(ngx_err, "Call timer_at failed: ", err)
@@ -69,13 +74,16 @@ function _M.first_init()
         ngx_log(ngx_err, "First initialize load consul data!")
     end
 end
+-- 开始循环定时拉取consul数据
 function _M.loop_load()
     local loop_handler
+    -- premature 表示nginx 的slave进程的状态（例如nginx平滑reload时，子进程可能存在未完全退出）
     function loop_handler(premature)
         ngx_log(ngx_err, "Timer prematurely expired: ", premature)
         ngx_log(ngx_err, "Worker exiting: ", ngx.worker.exiting())
         if not premature then
             if _M.sync_consul() then
+                -- 拉起定时器
                 local ok, err = timer_at(delay, loop_handler)
                 if not ok then
                     ngx_log(ngx_err, "Call timer_at failed: ", err)
@@ -87,6 +95,7 @@ function _M.loop_load()
             global_set:set("looped", false)
         end
     end
+    -- 绑定到第一个进程上，防止重复拉起定时器
     if global_set:get("looped") == false then
         if 0 == ngx.worker.id() then
             local ok, err = timer_at(delay, loop_handler)
